@@ -1,0 +1,60 @@
+import pandas as pd
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.master("local[*]").getOrCreate()
+from yahoofinancials import YahooFinancials
+def generate_financial_data(ticker):
+    yahoo_financials = YahooFinancials(ticker)
+    balanceSheetHistory_dt = yahoo_financials.get_financial_stmts('annual', 'balance')
+    incomeStatementHistory_dt = yahoo_financials.get_financial_stmts('annual', 'income')
+    cashflowStatementHistory_dt= yahoo_financials.get_financial_stmts('annual', 'cash')
+    for i in range(len(cashflowStatementHistory_dt['cashflowStatementHistory'][ticker])):
+      if i ==0:
+        cs_df1=pd.DataFrame(cashflowStatementHistory_dt['cashflowStatementHistory'][ticker][i])
+      else:
+        cs_df2=pd.DataFrame(cashflowStatementHistory_dt['cashflowStatementHistory'][ticker][i])
+        cs_df1=pd.concat([cs_df1, cs_df2], axis=1)
+    for i in range(len(balanceSheetHistory_dt['balanceSheetHistory'][ticker])):
+      if i ==0:
+        bs_df1=pd.DataFrame(balanceSheetHistory_dt['balanceSheetHistory'][ticker][i])
+      else:
+        bs_df2=pd.DataFrame(balanceSheetHistory_dt['balanceSheetHistory'][ticker][i])
+        bs_df1=pd.concat([bs_df1, bs_df2], axis=1)
+    for i in range(len(incomeStatementHistory_dt['incomeStatementHistory'][ticker])):
+      if i ==0:
+        is_df1=pd.DataFrame(incomeStatementHistory_dt['incomeStatementHistory'][ticker][i])
+      else:
+        is_df2=pd.DataFrame(incomeStatementHistory_dt['incomeStatementHistory'][ticker][i])
+        is_df1=pd.concat([is_df1, is_df2], axis=1)
+    if len(incomeStatementHistory_dt['incomeStatementHistory'][ticker])==0:
+      is_df1=pd.DataFrame(columns=[])
+    if len(balanceSheetHistory_dt['balanceSheetHistory'][ticker])==0:
+      bs_df1=pd.DataFrame(columns=[])
+    if len(cashflowStatementHistory_dt['cashflowStatementHistory'][ticker])==0:
+      cs_df1=pd.DataFrame(columns=[])
+    consolidated=pd.concat([is_df1.T,bs_df1.T],axis=1)
+    final=pd.merge(consolidated, cs_df1.T, left_index=True, right_index=True).drop_duplicates()
+    final = final.assign(ticker=ticker).reset_index()
+    final = final.loc[:, ~final.columns.duplicated()]
+    final_out=final
+    final_out=spark.createDataFrame(final)
+    #print("check final")
+    return final_out
+
+if __name__ == '__main__':
+    database = pd.read_csv(r"C:\Users\prathap.karunakaran\Desktop\project\analysis_report.csv")
+    companies_of_interest = database['Symbol'].tolist()
+    a = generate_financial_data('MSFT')
+    i=0
+    for ticker in companies_of_interest:
+        try:
+            b = generate_financial_data(ticker)
+            # if b.count>0:
+            c = a.unionByName(b, allowMissingColumns=True)
+            c=c.toPandas()
+            a = c
+            i = i +1
+        except (ValueError, TypeError, AttributeError, AssertionError):
+            print("missed to load {}".format(ticker))
+        print(ticker)
+        if i%10==0:
+            a.coalesce(0).write.save(path="",format='parquet',mode='overwrite',sep=',')
