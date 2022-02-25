@@ -1,3 +1,4 @@
 https://www.kaggle.com/ndrewgele/omg-nlp-with-the-djia-and-reddit
 https://www.kaggle.com/aaron7sun/stocknews/activity
 https://www.kaggle.com/lseiyjg/use-news-to-predict-stock-markets
+https://www.kaggle.com/swetash/nlp-predicting-stock-price-movement
